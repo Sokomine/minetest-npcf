@@ -124,6 +124,49 @@ function mvobj_proto:walk(pos, speed, param)
 	end
 end
 
+
+-- open doors and gates
+function mvobj_proto:open_door( pos, self )
+	-- open the closed door in front of the npc (the door is the next target on the path)
+	local node = minetest.get_node( pos );
+	if( node and node.name and  string.sub( node.name, 1, 6)=="doors:" and node.name~="doors:hidden") then
+		local str = string.sub( node.name, -2, -1 );
+		-- open a door
+		if( str=="_a" or str=="_b" ) then
+			local door_state = minetest.get_meta( pos ):get_int("state")
+			if door_state %2 == 0 then
+				minetest.registered_nodes[node.name].on_rightclick(pos,nil,nil)
+				self._door_pos = pos;
+			end
+		-- open a fence gate
+		elseif( string.sub( node.name, -7, -1) == "_closed") then
+			minetest.registered_nodes[node.name].on_rightclick(pos,node,nil)
+			self._gate_pos = pos;
+		end
+	end
+end
+
+
+function mvobj_proto:close_door( pos )
+	if( not( pos )) then
+		return;
+	end
+	local door_state = minetest.get_meta( pos ):get_int("state")
+	if door_state %2 == 1 then
+		local node = minetest.get_node( pos );
+		minetest.registered_nodes[node.name].on_rightclick(pos,node,nil);
+	end
+end
+
+
+function mvobj_proto:close_gate( pos )
+	if( not( pos )) then
+		return;
+	end
+	local node = minetest.get_node( pos );
+	minetest.registered_nodes[node.name].on_rightclick(pos,node,nil);
+end
+
 -- do a walking step
 function mvobj_proto:_do_movement_step(dtime)
 	-- step timing / initialization check
@@ -142,6 +185,18 @@ function mvobj_proto:_do_movement_step(dtime)
 		if not self._path or not self._path[1] then
 			self:stop()
 		else
+			if( self._door_pos and vector.distance( self.pos, self._door_pos ) > 1.0 ) then
+				mvobj_proto:close_door( self._door_pos );
+				self._door_pos = nil;
+			end
+			if( self._gate_pos and vector.distance( self.pos, self._gate_pos ) > 1.0 ) then
+				mvobj_proto:close_gate( self._gate_pos );
+				self._gate_pos = nil;
+			end
+
+			-- open the closed door in front of the npc (the door is the next target on the path)
+			mvobj_proto:open_door( self._path[1], self );
+
 			local a = table.copy(self.pos)
 			a.y = 0
 			local b = {x=self._path[1].x, y=0 ,z=self._path[1].z}
@@ -151,6 +206,7 @@ function mvobj_proto:_do_movement_step(dtime)
 			if vector.distance(a, b) < 0.4
 					or (self._path[2] and vector.distance(self.pos, self._path[2]) < vector.distance(self._path[1], self._path[2])) then
 				if self._path[2] then
+
 					table.remove(self._path, 1)
 					self._walk_started = true
 				else
@@ -208,10 +264,15 @@ function mvobj_proto:_do_movement_step(dtime)
 		self.acceleration = {x=0, y=-1, z=0}
 		self._npc.object:setacceleration(self.acceleration)
 	elseif minetest.registered_nodes[node[-1].name].walkable ~= false and 
-			minetest.registered_nodes[node[0].name].walkable ~= false then
+			minetest.registered_nodes[node[0].name].walkable ~= false and
+			-- do not jump when standing inside a door
+			string.sub( node[0].name, 1, 6)~="doors:" then
 		-- jump if in catched in walkable node
 		self.velocity.y = 3
 	else
+		-- the mob is standing inside a (closed) door; open it
+		mvobj_proto:open_door( {x=self.pos.x,y=self.pos.y-1,z=self.pos.z}, self );
+
 		-- walking
 		self.acceleration = {x=0, y=-10, z=0}
 		self._npc.object:setacceleration(self.acceleration)
@@ -221,6 +282,8 @@ function mvobj_proto:_do_movement_step(dtime)
 	self.velocity = npcf:get_walk_velocity(self.speed, self.velocity.y, self.yaw)
 	self._npc.object:setvelocity(self.velocity)
 end
+
+
 
 
 function mvobj_proto:get_path(pos)
@@ -240,7 +303,8 @@ function mvobj_proto:get_path(pos)
 	if not destpos then
 		destpos = self.pos
 	end
-	local path = minetest.find_path(startpos, destpos, 10, 1, 5, "Dijkstra")
+	--local path = minetest.find_path(startpos, destpos, 10, 1, 5, "Dijkstra")
+	local path = pathfinder.find_path(startpos, destpos, { collisionbox = {1,0,3,4,2}});
 
 	if not path and self.walk_param.find_path_fallback == true then
 		path = { destpos, pos }
