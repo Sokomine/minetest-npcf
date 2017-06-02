@@ -126,12 +126,24 @@ end
 
 
 -- open doors and gates
-function mvobj_proto:open_door( pos, self )
+function mvobj_proto:open_door( pos, self, target )
 	-- open the closed door in front of the npc (the door is the next target on the path)
 	local node = minetest.get_node( pos );
-	if( node and node.name and  string.sub( node.name, 1, 6)=="doors:" and node.name~="doors:hidden") then
+	-- gates from the cottages mod
+	if( node.name == "cottages:half_door" or node.name == "cottages:half_door_inverted"
+	    or( node and node.name and  string.sub( node.name, 1, 6)=="doors:" and node.name~="doors:hidden")) then
+		-- it depends on the direction the mob wants to go
+		local move_in_z_direction = math.abs( self.pos.z - target.z ) > math.abs( self.pos.x - target.x );
+		if( (    move_in_z_direction  and node.param2 % 2 == 0)
+		  or(not(move_in_z_direction) and node.param2 % 2 == 1)) then
+			minetest.registered_nodes[node.name].on_rightclick(pos,node,nil)
+			self._door_pos = pos;
+		end
+--[[
+	-- doors and gates from minetest_game
+	elseif( node and node.name and  string.sub( node.name, 1, 6)=="doors:" and node.name~="doors:hidden") then
 		local str = string.sub( node.name, -2, -1 );
-		-- open a door
+		-- open a door (state 0 indicates "closed")
 		if( str=="_a" or str=="_b" ) then
 			local door_state = minetest.get_meta( pos ):get_int("state")
 			if door_state %2 == 0 then
@@ -143,29 +155,24 @@ function mvobj_proto:open_door( pos, self )
 			minetest.registered_nodes[node.name].on_rightclick(pos,node,nil)
 			self._gate_pos = pos;
 		end
+--]]
+	-- open a gate from the cottages mod
+	elseif( node.name == "cottages:gate_closed" ) then
+		minetest.registered_nodes[node.name].on_rightclick(pos,node,nil)
+		self._gate_pos = pos;
 	end
 end
 
 
+-- a single right-click ought to be enough (it is no problem if that opens the door again)
 function mvobj_proto:close_door( pos )
-	if( not( pos )) then
-		return;
-	end
-	local door_state = minetest.get_meta( pos ):get_int("state")
-	if door_state %2 == 1 then
-		local node = minetest.get_node( pos );
-		minetest.registered_nodes[node.name].on_rightclick(pos,node,nil);
-	end
-end
-
-
-function mvobj_proto:close_gate( pos )
 	if( not( pos )) then
 		return;
 	end
 	local node = minetest.get_node( pos );
 	minetest.registered_nodes[node.name].on_rightclick(pos,node,nil);
 end
+
 
 -- do a walking step
 function mvobj_proto:_do_movement_step(dtime)
@@ -190,12 +197,12 @@ function mvobj_proto:_do_movement_step(dtime)
 				self._door_pos = nil;
 			end
 			if( self._gate_pos and vector.distance( self.pos, self._gate_pos ) > 1.0 ) then
-				mvobj_proto:close_gate( self._gate_pos );
+				mvobj_proto:close_door( self._gate_pos );
 				self._gate_pos = nil;
 			end
 
 			-- open the closed door in front of the npc (the door is the next target on the path)
-			mvobj_proto:open_door( self._path[1], self );
+			mvobj_proto:open_door( self._path[1], self, self._path[1] );
 
 			local a = table.copy(self.pos)
 			a.y = 0
@@ -266,12 +273,18 @@ function mvobj_proto:_do_movement_step(dtime)
 	elseif minetest.registered_nodes[node[-1].name].walkable ~= false and 
 			minetest.registered_nodes[node[0].name].walkable ~= false and
 			-- do not jump when standing inside a door
+			node[0].name ~= "cottages:gate_closed" and
+			node[0].name ~= "cottages:gate_open" and
+			node[0].name ~= "cottages:half_door" and
+			node[0].name ~= "cottages:half_door_inverted" and
 			string.sub( node[0].name, 1, 6)~="doors:" then
 		-- jump if in catched in walkable node
 		self.velocity.y = 3
 	else
 		-- the mob is standing inside a (closed) door; open it
-		mvobj_proto:open_door( {x=self.pos.x,y=self.pos.y-1,z=self.pos.z}, self );
+		if( self._path and self._path[1] ) then
+			mvobj_proto:open_door( {x=self.pos.x,y=self.pos.y-1,z=self.pos.z}, self, self._path[1] );
+		end
 
 		-- walking
 		self.acceleration = {x=0, y=-10, z=0}
