@@ -29,6 +29,7 @@ if not minetest.mkdir(NPCF_DATADIR) then
 	return
 end
 
+dofile(NPCF_MODPATH.."/mob_door_handling.lua")
 dofile(NPCF_MODPATH.."/npcf.lua")
 dofile(NPCF_MODPATH.."/chatcommands.lua")
 
