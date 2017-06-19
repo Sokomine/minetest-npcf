@@ -143,16 +143,16 @@ function mvobj_proto:_do_movement_step(dtime)
 			self:stop()
 		else
 			if( self._door_pos and vector.distance( self.pos, self._door_pos ) > 1.0 ) then
-				mob_door_handling.close_door( self._door_pos );
+				mob_world_interaction.close_door( self, self._door_pos );
 				self._door_pos = nil;
 			end
 			if( self._gate_pos and vector.distance( self.pos, self._gate_pos ) > 1.0 ) then
-				mob_door_handling.close_door( self._gate_pos );
+				mob_world_interaction.close_door( self, self._gate_pos );
 				self._gate_pos = nil;
 			end
 
 			-- open the closed door in front of the npc (the door is the next target on the path)
-			mob_door_handling.open_door( self._path[1], self, self._path[1] );
+			mob_world_interaction.open_door( self, self._path[1], self._path[1] );
 
 			local a = table.copy(self.pos)
 			a.y = 0
@@ -223,13 +223,13 @@ function mvobj_proto:_do_movement_step(dtime)
 	elseif minetest.registered_nodes[node[-1].name].walkable ~= false and 
 			minetest.registered_nodes[node[0].name].walkable ~= false and
 			-- do not jump when standing inside a door, gate or similar node
-			mob_door_handling.door_type[node[0].name] == nil then
+			mob_world_interaction.door_type[node[0].name] == nil then
 		-- jump if in catched in walkable node
 		self.velocity.y = 3
 	else
 		-- the mob is standing inside a (closed) door; open it
 		if( self._path and self._path[1] ) then
-			mob_door_handling.open_door( {x=self.pos.x,y=self.pos.y-1,z=self.pos.z}, self, self._path[1] );
+			mob_world_interaction.open_door( self, {x=self.pos.x,y=self.pos.y-1,z=self.pos.z}, self._path[1] );
 		end
 
 		-- walking
@@ -263,7 +263,7 @@ function mvobj_proto:get_path(pos)
 		destpos = self.pos
 	end
 	--local path = minetest.find_path(startpos, destpos, 10, 1, 5, "Dijkstra")
-	local path = pathfinder.find_path(startpos, destpos, { collisionbox = {1,0,3,4,2}});
+	local path = mob_world_interaction.find_path(startpos, destpos, { collisionbox = {1,0,3,4,2}});
 
 	if not path and self.walk_param.find_path_fallback == true then
 		path = { destpos, pos }
